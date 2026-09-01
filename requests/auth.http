@@ -1,0 +1,35 @@
+### Успешная регистрация -> ожидаем 201 и тело без passwordHash
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@test2.com",
+  "password": "password2"
+}
+
+### Повтор того же email -> ожидаем 409 Conflict
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+### Невалидный email и слишком короткий пароль -> ожидаем 400 с деталями по обоим полям
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "not-an-email",
+  "password": "123"
+}
+
+### Пароль без цифры -> ожидаем 400 (не проходит @Matches)
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "another@test.com",
+  "password": "onlyletters"
+}

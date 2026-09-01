@@ -54,3 +54,11 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Claude Code
+CLAUDE.md
+.claude/settings.local.json
+
+# oh-my-claudecode runtime state
+.omc/
+!.omc/skills/
