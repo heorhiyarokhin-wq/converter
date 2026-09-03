@@ -1,0 +1,44 @@
+### Успешный логин с верными кредами -> ожидаем 200 и { accessToken }
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+### Логин с другим регистром email -> ожидаем 200 (та же нормализация, что при регистрации)
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "Test@Test.com",
+  "password": "passw0rd"
+}
+
+### Неверный пароль -> ожидаем 401 с нейтральным "Invalid credentials"
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "wrong-password"
+}
+
+### Несуществующий email -> ожидаем тот же 401 "Invalid credentials" (не палит, что email не найден)
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "no-such-user@test.com",
+  "password": "passw0rd"
+}
+
+### Невалидный формат email -> ожидаем 400
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "not-an-email",
+  "password": "passw0rd"
+}
