@@ -1,0 +1,103 @@
+### === Setup: логин под test@test.com (admin, тот же аккаунт, что в rbac.http) ===
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+> {%
+    client.global.set("adminToken", response.body.accessToken);
+%}
+
+### Регистрация обычного пользователя без прав auth-settings@manage (для проверки 403)
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "auth-settings-noperm@test.com",
+  "password": "password2"
+}
+
+### Логин под этим пользователем
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "auth-settings-noperm@test.com",
+  "password": "password2"
+}
+
+> {%
+    client.global.set("noPermToken", response.body.accessToken);
+%}
+
+### === GET /admin/auth-settings ===
+
+### Без токена -> 401
+GET http://localhost:3007/admin/auth-settings
+
+### С токеном, но без роли admin -> 403
+GET http://localhost:3007/admin/auth-settings
+Authorization: Bearer {{noPermToken}}
+
+### С admin-токеном -> 200, список настроек (сейчас только action=login)
+GET http://localhost:3007/admin/auth-settings
+Authorization: Bearer {{adminToken}}
+
+### === PUT /admin/auth-settings/:action ===
+
+### Включить подтверждение для login -> 200, required: true
+PUT http://localhost:3007/admin/auth-settings/login
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "required": true
+}
+
+### Проверка, что флаг сразу подействовал (без рестарта сервера) -> ожидаем attemptId вместо accessToken
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+### Выключить обратно -> 200, required: false (регресс-проверка для остальных .http файлов)
+PUT http://localhost:3007/admin/auth-settings/login
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "required": false
+}
+
+### Несуществующее действие -> 404
+PUT http://localhost:3007/admin/auth-settings/register
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "required": true
+}
+
+### Невалидное тело (required не boolean) -> 400
+PUT http://localhost:3007/admin/auth-settings/login
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "required": "yes"
+}
+
+### Без прав admin -> 403
+PUT http://localhost:3007/admin/auth-settings/login
+Authorization: Bearer {{noPermToken}}
+Content-Type: application/json
+
+{
+  "required": true
+}

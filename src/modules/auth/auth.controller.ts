@@ -3,7 +3,13 @@ import { Throttle } from '@nestjs/throttler';
 
 import { Public } from '@/core/auth/decorators/public.decorator';
 
-import { AuthService, LoginResult, RegisteredUser } from './auth.service';
+import {
+  AuthService,
+  LoginResult,
+  PendingLoginResult,
+  RegisteredUser,
+} from './auth.service';
+import { ConfirmLoginDto } from './dto/confirm-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -22,7 +28,15 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto): Promise<LoginResult> {
+  login(@Body() dto: LoginDto): Promise<LoginResult | PendingLoginResult> {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('login/confirm')
+  @HttpCode(HttpStatus.OK)
+  confirmLogin(@Body() dto: ConfirmLoginDto): Promise<LoginResult> {
+    return this.authService.confirmLogin(dto);
   }
 }

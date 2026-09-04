@@ -1,16 +1,30 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
+
+import { ConfigService } from '@/core/config/config.service';
+import { MailService } from '@/core/mail/mail.service';
 
 import { UsersService } from '../users/users.service';
 
+import { AuthConfigService } from './auth-config.service';
 import { AuthService } from './auth.service';
+import { LoginAttempt } from './entities/login-attempt.entity';
 
 describe('AuthService', () => {
   let service: AuthService;
   let usersService: { findByEmail: jest.Mock; createUser: jest.Mock };
   let jwtService: { signAsync: jest.Mock };
+  let configService: { get: jest.Mock };
+  let authConfigService: { isConfirmationRequired: jest.Mock };
+  let mailService: { send: jest.Mock };
+  let loginAttemptsRepository: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
 
   beforeEach(async () => {
     usersService = {
@@ -20,12 +34,33 @@ describe('AuthService', () => {
     jwtService = {
       signAsync: jest.fn(),
     };
+    configService = {
+      get: jest.fn(),
+    };
+    authConfigService = {
+      isConfirmationRequired: jest.fn().mockReturnValue(false),
+    };
+    mailService = {
+      send: jest.fn(),
+    };
+    loginAttemptsRepository = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
+        { provide: ConfigService, useValue: configService },
+        { provide: AuthConfigService, useValue: authConfigService },
+        { provide: MailService, useValue: mailService },
+        {
+          provide: getRepositoryToken(LoginAttempt),
+          useValue: loginAttemptsRepository,
+        },
       ],
     }).compile();
 

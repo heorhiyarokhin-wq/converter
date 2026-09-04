@@ -39,4 +39,18 @@ export const configValidationSchema = Joi.object<Config>({
    */
   JWT_SECRET: Joi.string().required(),
   JWT_EXPIRES_IN: Joi.string().optional().default('15m'),
+
+  /**
+   * OTP (login confirmation) options
+   */
+  OTP_LENGTH: Joi.number().optional().default(6),
+  OTP_TTL_MINUTES: Joi.number().optional().default(10),
+  OTP_MAX_ATTEMPTS: Joi.number().optional().default(5),
+  OTP_RESEND_COOLDOWN_SECONDS: Joi.number().optional().default(60),
+
+  /**
+   * SMTP (mail sending) options
+   */
+  SMTP_URL: Joi.string().optional(),
+  MAIL_FROM: Joi.string().optional(),
 });
