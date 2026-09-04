@@ -3,8 +3,8 @@ POST http://localhost:3007/auth/login
 Content-Type: application/json
 
 {
-  "email": "test@test.com",
-  "password": "passw0rd"
+  "email": "test@test08.com",
+  "password": "password38"
 }
 
 ### Логин с другим регистром email -> ожидаем 200 (та же нормализация, что при регистрации)

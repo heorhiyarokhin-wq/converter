@@ -3,8 +3,8 @@ POST http://localhost:3007/auth/register
 Content-Type: application/json
 
 {
-  "email": "test@test2.com",
-  "password": "password2"
+  "email": "test@test08.com",
+  "password": "password38"
 }
 
 ### Повтор того же email -> ожидаем 409 Conflict
@@ -12,8 +12,8 @@ POST http://localhost:3007/auth/register
 Content-Type: application/json
 
 {
-  "email": "test@test.com",
-  "password": "passw0rd"
+  "email": "test@test08.com",
+  "password":"password38"
 }
 
 ### Невалидный email и слишком короткий пароль -> ожидаем 400 с деталями по обоим полям
