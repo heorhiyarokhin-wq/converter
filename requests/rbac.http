@@ -1,0 +1,175 @@
+### === Setup: логин под test@test.com (уже промотирован в admin вручную через SQL) ===
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+> {%
+    client.global.set("adminToken", response.body.accessToken);
+%}
+
+### Регистрация обычного пользователя без прав rbac@manage (для проверки 403)
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "rbac-noperm@test.com",
+  "password": "password2"
+}
+
+### Логин под этим пользователем
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "rbac-noperm@test.com",
+  "password": "password2"
+}
+
+> {%
+    client.global.set("noPermToken", response.body.accessToken);
+%}
+
+### === Roles ===
+
+### Без токена -> 401
+GET http://localhost:3007/admin/rbac/roles
+
+### С токеном, но без роли admin -> 403
+GET http://localhost:3007/admin/rbac/roles
+Authorization: Bearer {{noPermToken}}
+
+### С admin-токеном -> 200, список ролей
+GET http://localhost:3007/admin/rbac/roles
+Authorization: Bearer {{adminToken}}
+
+### Создать роль 'moderator' -> 201
+POST http://localhost:3007/admin/rbac/roles
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "moderator"
+}
+
+> {%
+    client.global.set("roleId", response.body.id);
+%}
+
+### Повтор того же имени -> 409
+POST http://localhost:3007/admin/rbac/roles
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "moderator"
+}
+
+### Обновить описание роли -> 200
+PUT http://localhost:3007/admin/rbac/roles/{{roleId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "description": "Can moderate content"
+}
+
+### === Permissions ===
+
+### Создать разрешение 'documents' -> 201
+POST http://localhost:3007/admin/rbac/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "resource": "documents",
+  "actions": ["create", "read", "update", "delete"]
+}
+
+> {%
+    client.global.set("permissionId", response.body.id);
+%}
+
+### Повтор того же resource -> 409
+POST http://localhost:3007/admin/rbac/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "resource": "documents",
+  "actions": ["create"]
+}
+
+### Обновить набор actions разрешения -> 200
+PUT http://localhost:3007/admin/rbac/permissions/{{permissionId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "actions": ["create", "read", "update", "delete", "archive"]
+}
+
+### === Grants ===
+
+### Назначить moderator -> documents (только read+update) -> 201
+POST http://localhost:3007/admin/rbac/grants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "roleId": "{{roleId}}",
+  "permissionId": "{{permissionId}}",
+  "actions": ["read", "update"]
+}
+
+> {%
+    client.global.set("grantId", response.body.id);
+%}
+
+### Повтор того же назначения (та же пара roleId+permissionId) -> 409
+POST http://localhost:3007/admin/rbac/grants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "roleId": "{{roleId}}",
+  "permissionId": "{{permissionId}}"
+}
+
+### Несуществующая роль в grant -> 404
+POST http://localhost:3007/admin/rbac/grants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "roleId": "00000000-0000-0000-0000-000000000000",
+  "permissionId": "{{permissionId}}"
+}
+
+### Сузить actions существующего grant'а -> 200
+PUT http://localhost:3007/admin/rbac/grants/{{grantId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "actions": ["read"]
+}
+
+### Попытка удалить permission с активным grant -> 409
+DELETE http://localhost:3007/admin/rbac/permissions/{{permissionId}}
+Authorization: Bearer {{adminToken}}
+
+### Удалить grant -> 200
+DELETE http://localhost:3007/admin/rbac/grants/{{grantId}}
+Authorization: Bearer {{adminToken}}
+
+### Теперь permission можно удалить (зависимостей больше нет) -> 200
+DELETE http://localhost:3007/admin/rbac/permissions/{{permissionId}}
+Authorization: Bearer {{adminToken}}
+
+### Удалить роль moderator -> 200
+DELETE http://localhost:3007/admin/rbac/roles/{{roleId}}
+Authorization: Bearer {{adminToken}}

@@ -4,7 +4,7 @@ import { Config } from './config.types';
 
 export const configValidationSchema = Joi.object<Config>({
   PORT: Joi.number().port().required(),
-  NODE_ENV: Joi.string().valid('development', 'production').required(),
+  NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
 
   /**
    * Cookie secret
@@ -33,4 +33,10 @@ export const configValidationSchema = Joi.object<Config>({
   POSTGRES_SYNCHRONIZE: Joi.boolean().optional().default(false),
   POSTGRES_LOGGING: Joi.boolean().optional().default(false),
   POSTGRES_MIGRATIONS_RUN: Joi.boolean().optional().default(false),
+
+  /**
+   * JWT auth options
+   */
+  JWT_SECRET: Joi.string().required(),
+  JWT_EXPIRES_IN: Joi.string().optional().default('15m'),
 });

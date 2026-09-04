@@ -72,6 +72,24 @@ nest generate controller <name>
 nest generate service <name>
 ```
 
+## Authentication & RBAC
+
+- **Auth:** `POST /auth/register` / `POST /auth/login` issue a short-lived JWT (`JWT_EXPIRES_IN`, default `15m`). Send it as `Authorization: Bearer <token>` on every request.
+- **Access control:** roles/permissions/grants live in the DB (`roles`, `permissions`, `role_permissions`, `user_roles`) and are cached in memory (`RbacConfigService`), reloaded after every admin mutation. Endpoints without an explicit `@RequirePermission()` return `403` by default (fail-closed).
+- **Admin CRUD:** `/admin/rbac/roles|permissions|grants`, gated by `rbac@manage`.
+
+### Bootstrapping the first admin
+
+The `CreateRbac` migration seeds an `admin` role, but assigns it to no one. After registering the account that should be your first admin, promote it manually:
+
+```sql
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id FROM users u, roles r
+WHERE u.email = 'your-email@example.com' AND r.name = 'admin';
+```
+
+Run once, via `psql` or any Postgres GUI client.
+
 ## Code Style
 
 - Use `@` aliases for imports (e.g., `@config/config.service`)

@@ -1,8 +1,15 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 
 import { UsersService } from '@/modules/users/users.service';
 
+import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 const SALT_ROUNDS = 10;
@@ -11,15 +18,22 @@ const POSTGRES_UNIQUE_VIOLATION = '23505';
 export interface RegisteredUser {
   id: string;
   email: string;
-  role: string;
+  roles: string[];
   createdAt: Date;
+}
+
+export interface LoginResult {
+  accessToken: string;
 }
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async register(dto: RegisterDto): Promise<RegisteredUser> {
     this.logger.debug('Registration attempt received');
@@ -44,7 +58,7 @@ export class AuthService {
       return {
         id: user.id,
         email: user.email,
-        role: user.role,
+        roles: user.roles.map((role) => role.name),
         createdAt: user.createdAt,
       };
     } catch (error) {
@@ -59,6 +73,27 @@ export class AuthService {
       );
       throw error;
     }
+  }
+
+  async login(dto: LoginDto): Promise<LoginResult> {
+    const user = await this.usersService.findByEmail(dto.email);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const accessToken = await this.jwtService.signAsync({ sub: user.id });
+
+    return { accessToken };
   }
 
   private isUniqueViolation(error: unknown): boolean {

@@ -1,4 +1,5 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import bcrypt from 'bcryptjs';
 
@@ -9,17 +10,22 @@ import { AuthService } from './auth.service';
 describe('AuthService', () => {
   let service: AuthService;
   let usersService: { findByEmail: jest.Mock; createUser: jest.Mock };
+  let jwtService: { signAsync: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
       findByEmail: jest.fn(),
       createUser: jest.fn(),
     };
+    jwtService = {
+      signAsync: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: UsersService, useValue: usersService },
+        { provide: JwtService, useValue: jwtService },
       ],
     }).compile();
 
@@ -39,7 +45,7 @@ describe('AuthService', () => {
             id: 'generated-id',
             email,
             passwordHash,
-            role: 'user',
+            roles: [{ id: 'role-id', name: 'user' }],
             createdAt: new Date('2026-01-01'),
             updatedAt: new Date('2026-01-01'),
           }),
@@ -65,7 +71,7 @@ describe('AuthService', () => {
       expect(result).toEqual({
         id: 'generated-id',
         email: 'new@test.com',
-        role: 'user',
+        roles: ['user'],
         createdAt: new Date('2026-01-01'),
       });
       expect(result).not.toHaveProperty('passwordHash');
@@ -95,6 +101,48 @@ describe('AuthService', () => {
       await expect(
         service.register({ email: 'race@test.com', password: 'passw0rd' }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('login', () => {
+    it('returns an access token for correct credentials', async () => {
+      const passwordHash = await bcrypt.hash('correct-password', 10);
+      usersService.findByEmail.mockResolvedValue({
+        id: 'user-1',
+        email: 'test@test.com',
+        passwordHash,
+      });
+      jwtService.signAsync.mockResolvedValue('signed-token');
+
+      const result = await service.login({
+        email: 'test@test.com',
+        password: 'correct-password',
+      });
+
+      expect(result).toEqual({ accessToken: 'signed-token' });
+      expect(jwtService.signAsync).toHaveBeenCalledWith({ sub: 'user-1' });
+    });
+
+    it('throws the same 401 for a wrong password as for a non-existent email', async () => {
+      const passwordHash = await bcrypt.hash('correct-password', 10);
+      usersService.findByEmail.mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'test@test.com',
+        passwordHash,
+      });
+
+      await expect(
+        service.login({
+          email: 'test@test.com',
+          password: 'wrong-password',
+        }),
+      ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+
+      usersService.findByEmail.mockResolvedValueOnce(null);
+
+      await expect(
+        service.login({ email: 'nobody@test.com', password: 'whatever' }),
+      ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
     });
   });
 });
