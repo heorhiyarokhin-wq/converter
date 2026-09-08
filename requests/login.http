@@ -1,11 +1,17 @@
 ### Успешный логин с верными кредами -> ожидаем 200 и { accessToken }
+### refresh_token уходит в httpOnly cookie (клиент .http должен вести cookie jar,
+### у VS Code REST Client / IntelliJ HTTP Client это включено по умолчанию)
 POST http://localhost:3007/auth/login
 Content-Type: application/json
 
 {
-  "email": "test@test08.com",
-  "password": "password38"
+  "email": "test@test04.com",
+  "password": "password39"
 }
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+%}
 
 ### Логин с другим регистром email -> ожидаем 200 (та же нормализация, что при регистрации)
 POST http://localhost:3007/auth/login
@@ -107,3 +113,23 @@ Content-Type: application/json
   "attemptId": "{{realAttemptId}}",
   "otpCode": "426243"
 }
+
+### === Авторизация: refresh + logout ===
+
+### Обновление пары токенов по refresh-cookie -> ожидаем 200 { accessToken }
+### Cookie refresh_token ставится сервером на login/confirm выше и переотправляется
+### клиентом автоматически (path=/auth/refresh совпадает с этим запросом)
+POST http://localhost:3007/auth/refresh
+Content-Type: application/json
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+%}
+
+### Logout -> ожидаем 200 { success: true }, refresh_token cookie очищается сервером
+POST http://localhost:3007/auth/logout
+Authorization: Bearer {{accessToken}}
+
+### Повторный refresh после logout -> ожидаем 401 (cookie уже очищена)
+POST http://localhost:3007/auth/refresh
+Content-Type: application/json
