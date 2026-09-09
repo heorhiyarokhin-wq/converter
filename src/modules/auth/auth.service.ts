@@ -9,6 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
+import type { SignOptions } from 'jsonwebtoken';
 import { IsNull, Repository } from 'typeorm';
 
 import { ConfigService } from '@/core/config/config.service';
@@ -35,6 +36,10 @@ export interface RegisteredUser {
 
 export interface LoginResult {
   accessToken: string;
+}
+
+export interface TokenPair extends LoginResult {
+  refreshToken: string;
 }
 
 export interface PendingLoginResult {
@@ -97,7 +102,7 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<LoginResult | PendingLoginResult> {
+  async login(dto: LoginDto): Promise<TokenPair | PendingLoginResult> {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user) {
@@ -134,7 +139,7 @@ export class AuthService {
     return pending;
   }
 
-  async confirmLogin(dto: ConfirmLoginDto): Promise<LoginResult> {
+  async confirmLogin(dto: ConfirmLoginDto): Promise<TokenPair> {
     const attempt = await this.loginAttemptsRepository.findOne({
       where: { id: dto.attemptId },
     });
@@ -183,10 +188,57 @@ export class AuthService {
     return this.issueTokens(attempt.userId);
   }
 
-  private async issueTokens(userId: string): Promise<LoginResult> {
-    const accessToken = await this.jwtService.signAsync({ sub: userId });
+  async refreshTokens(refreshToken: string): Promise<TokenPair> {
+    const invalidToken = () =>
+      new UnauthorizedException('Invalid refresh token');
 
-    return { accessToken };
+    let payload: { sub: string };
+
+    try {
+      payload = await this.jwtService.verifyAsync<{ sub: string }>(
+        refreshToken,
+        { secret: this.configService.get('JWT_REFRESH_SECRET') },
+      );
+    } catch {
+      this.logger.warn('[AUTH audit] action=refresh result=invalid_token');
+      throw invalidToken();
+    }
+
+    const user = await this.usersService.findById(payload.sub);
+
+    if (!user) {
+      this.logger.warn(
+        `[AUTH audit] action=refresh result=invalid_token userId=${payload.sub}`,
+      );
+      throw invalidToken();
+    }
+
+    this.logger.log(
+      `[AUTH audit] action=refresh result=success userId=${user.id}`,
+    );
+
+    return this.issueTokens(user.id);
+  }
+
+  logout(userId: string): void {
+    this.logger.log(
+      `[AUTH audit] action=logout result=success userId=${userId}`,
+    );
+  }
+
+  private async issueTokens(userId: string): Promise<TokenPair> {
+    const accessToken = await this.jwtService.signAsync({ sub: userId });
+    const refreshToken = await this.jwtService.signAsync(
+      { sub: userId },
+      {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get(
+          'JWT_REFRESH_EXPIRES_IN',
+        ) as SignOptions['expiresIn'],
+      },
+    );
+
+    return { accessToken, refreshToken };
   }
 
   private async createPendingLoginAttempt(

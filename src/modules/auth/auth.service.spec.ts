@@ -140,22 +140,41 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('returns an access token for correct credentials', async () => {
+    it('returns an access token and a refresh token for correct credentials', async () => {
       const passwordHash = await bcrypt.hash('correct-password', 10);
       usersService.findByEmail.mockResolvedValue({
         id: 'user-1',
         email: 'test@test.com',
         passwordHash,
       });
-      jwtService.signAsync.mockResolvedValue('signed-token');
+      jwtService.signAsync
+        .mockResolvedValueOnce('signed-access-token')
+        .mockResolvedValueOnce('signed-refresh-token');
+      configService.get.mockImplementation(
+        (key: string) =>
+          ({
+            JWT_REFRESH_SECRET: 'refresh-secret',
+            JWT_REFRESH_EXPIRES_IN: '7d',
+          })[key],
+      );
 
       const result = await service.login({
         email: 'test@test.com',
         password: 'correct-password',
       });
 
-      expect(result).toEqual({ accessToken: 'signed-token' });
-      expect(jwtService.signAsync).toHaveBeenCalledWith({ sub: 'user-1' });
+      expect(result).toEqual({
+        accessToken: 'signed-access-token',
+        refreshToken: 'signed-refresh-token',
+      });
+      expect(jwtService.signAsync).toHaveBeenNthCalledWith(1, {
+        sub: 'user-1',
+      });
+      expect(jwtService.signAsync).toHaveBeenNthCalledWith(
+        2,
+        { sub: 'user-1' },
+        { secret: 'refresh-secret', expiresIn: '7d' },
+      );
     });
 
     it('throws the same 401 for a wrong password as for a non-existent email', async () => {
