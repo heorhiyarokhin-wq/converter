@@ -21,6 +21,9 @@ export class User {
   @Column({ name: 'password_hash' })
   passwordHash: string;
 
+  @Column({ type: 'text', nullable: true })
+  photo: string | null;
+
   @ManyToMany(() => Role)
   @JoinTable({
     name: 'user_roles',
