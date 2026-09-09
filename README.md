@@ -37,6 +37,7 @@ PostgreSQL and TypeORM are already wired in. Use them for new modules — no ext
 - **Repositories:** `TypeOrmModule.forFeature([YourEntity])` in a feature module, then `@InjectRepository(YourEntity)`
 - **Transactions:** `@Transactional()` from `typeorm-transactional` (context is initialized in `main.ts`)
 - **Schema:** migrations in `src/database/migrations/`. `POSTGRES_SYNCHRONIZE` is `false` by default — do not rely on auto-sync
+- **SQL study track:** [docs/postgres-sql.md](docs/postgres-sql.md) (practice queries: `src/database/practice/postgres-sql-practice.sql`)
 
 ```bash
 npm run migration:generate   # Generate from entity changes

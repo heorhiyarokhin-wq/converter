@@ -35,4 +35,19 @@ export interface Config {
    */
   JWT_SECRET: string;
   JWT_EXPIRES_IN?: string;
+
+  /**
+   * OTP (login confirmation) options
+   */
+  OTP_LENGTH?: number;
+  OTP_TTL_MINUTES?: number;
+  OTP_MAX_ATTEMPTS?: number;
+  OTP_RESEND_COOLDOWN_SECONDS?: number;
+
+  /**
+   * SMTP (mail sending) options — optional; MailService falls back to
+   * console logging when SMTP_URL is not set.
+   */
+  SMTP_URL?: string;
+  MAIL_FROM?: string;
 }

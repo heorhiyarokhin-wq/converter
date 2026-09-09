@@ -3,8 +3,8 @@ POST http://localhost:3007/auth/login
 Content-Type: application/json
 
 {
-  "email": "test@test.com",
-  "password": "passw0rd"
+  "email": "test@test08.com",
+  "password": "password38"
 }
 
 ### Логин с другим регистром email -> ожидаем 200 (та же нормализация, что при регистрации)
@@ -41,4 +41,69 @@ Content-Type: application/json
 {
   "email": "not-an-email",
   "password": "passw0rd"
+}
+
+### === Вариант B: подтверждение включено ===
+### ВАЖНО: флаг сейчас включён вручную через psql (admin-эндпоинта переключения ещё нет,
+### это отдельный шаг плана). Аккаунт test@test.com/passw0rd — тот же admin, что в rbac.http.
+### Ожидаем: 200 { attemptId, method: "otp", expiresInSec: 600 } вместо { accessToken }
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+> {%
+    client.global.set("attemptId", response.body.attemptId);
+%}
+
+### Повторный вызов сразу же -> ожидаем 429 (resend-cooldown, 60 сек)
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+
+
+### Подтверждение кода -> ожидаем 200 { accessToken }
+### otpCode нельзя получить автоматически (уходит в лог сервера через MailService-заглушку) -
+### вставь сюда вручную код из консоли сервера ([MAIL STUB] ... "Your code: XXXXXX") перед отправкой
+POST http://localhost:3007/auth/login/confirm
+Content-Type: application/json
+
+{
+  "attemptId": "{{attemptId}}",
+  "otpCode": "REPLACE_WITH_CODE_FROM_LOGS"
+}
+
+### === Вариант B с реальной отправкой почты (SMTP настроен) ===
+### ВАЖНО: логиниться нужно аккаунтом с настоящим email (не test@test.com — это фиктивный
+### домен, письмо туда не дойдёт). Сначала зарегистрируй этот аккаунт через auth.http,
+### если ещё не сделано. Флаг login по-прежнему включается вручную через psql.
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "password1"
+}
+
+> {%
+    client.global.set("realAttemptId", response.body.attemptId);
+%}
+
+### Подтверждение реальным кодом -> ожидаем 200 { accessToken }
+### Код на этот раз реально приходит на почту (проверь ящик, в т.ч. папку "Спам") -
+### вставь сюда код из письма перед отправкой
+POST http://localhost:3007/auth/login/confirm
+Content-Type: application/json
+
+{
+  "attemptId": "{{realAttemptId}}",
+  "otpCode": "426243"
 }
