@@ -1,3 +1,13 @@
+### Значения ниже задаются ОДИН раз и переиспользуются везде через {{userAEmail}} и т.д. —
+### рассинхронизация "зарегистрировали одним email, логинимся другим" структурно невозможна,
+### пока email меняется только здесь. При повторном прогоне всего файла (чтобы не ловить
+### 409 "email already registered" на уже существующих userA/userB) меняйте суффикс ТОЛЬКО
+### в этих трёх строках — остальной файл ничего не знает про конкретное значение.
+@userAEmail = profile-a5@test.com
+@userBEmail = profile-b5@test.com
+@userAPassword = passwordA1
+@userBPassword = passwordB1
+
 ### === Подготовка: два обычных юзера + админ ===
 
 ### Регистрация userA (нужен для теста "self") -> 201, сохраняем id
@@ -5,8 +15,8 @@ POST http://localhost:3007/auth/register
 Content-Type: application/json
 
 {
-  "email": "profile-a@test.com",
-  "password": "passwordA1"
+  "email": "{{userAEmail}}",
+  "password": "{{userAPassword}}"
 }
 
 > {%
@@ -18,8 +28,8 @@ POST http://localhost:3007/auth/login
 Content-Type: application/json
 
 {
-  "email": "profile-a@test.com",
-  "password": "passwordA1"
+  "email": "{{userAEmail}}",
+  "password": "{{userAPassword}}"
 }
 
 > {%
@@ -31,8 +41,8 @@ POST http://localhost:3007/auth/register
 Content-Type: application/json
 
 {
-  "email": "profile-b@test.com",
-  "password": "passwordB1"
+  "email": "{{userBEmail}}",
+  "password": "{{userBPassword}}"
 }
 
 > {%
@@ -83,3 +93,162 @@ Authorization: Bearer {{adminToken}}
 
 ### 401: запрос без токена вообще -> 401 (JwtAuthGuard, роут не @Public())
 GET http://localhost:3007/users/{{userAId}}
+
+### === Раздел 2: Изменение данных (PATCH /users/:id) ===
+
+### Self: userA меняет свой photo -> 200, email не тронут
+PATCH http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "photo": "https://example.com/avatar-a.png"
+}
+
+### Self: userA пытается поменять свой email напрямую через PATCH -> 403
+### Сервис явно запрещает self менять email этим эндпоинтом (только через /email-change)
+PATCH http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "email": "hacked-direct@test.com"
+}
+
+### Чужой без права: userA пытается поменять photo userB -> 403
+### RbacGuard пропускает (у userA есть 'update'), но сервис видит targetId !== actorId
+### и update-any у роли 'user' отсутствует
+PATCH http://localhost:3007/users/{{userBId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "photo": "https://example.com/hacked.png"
+}
+
+### Admin: меняет photo userA напрямую -> 200
+### У роли admin есть update-any -> прошла self/any-проверка
+PATCH http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "photo": "https://example.com/admin-set.png"
+}
+
+### 409: admin пытается поставить userA email, уже занятый userB
+### {{userBEmail}} — та же переменная, что и в регистрации userB выше, поэтому
+### email гарантированно занят на момент этого запроса
+PATCH http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "email": "{{userBEmail}}"
+}
+
+### Admin: меняет email userA напрямую, без подтверждения -> 200
+### Выполнять ПОСЛЕ теста на 409 выше — иначе следующий прогон файла не сможет
+### зарегистрировать userA заново под {{userAEmail}} (email уже сменится на другой)
+PATCH http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "email": "profile-a-changed-by-admin@test.com"
+}
+
+### 400: невалидный photo (не URL)
+PATCH http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "photo": "not-a-url"
+}
+
+### === Раздел 3: Смена email через подтверждение (self, OTP) ===
+### Внимание: письмо с кодом уйдёт реально (в .env настроен рабочий SMTP_URL),
+### либо будет строкой "[MAIL STUB] ..." в логе приложения, если SMTP недоступен.
+### Код для confirm-запросов нужно взять из письма/лога и вписать вручную.
+
+### Self: userA инициирует смену email -> 200 { requiresConfirmation: true, challengeId }
+POST http://localhost:3007/users/{{userAId}}/email-change
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "newEmail": "profile-a-new@test.com"
+}
+
+> {%
+    client.global.set("emailChangeChallengeId", response.body.challengeId);
+%}
+
+### Чужой: userA пытается инициировать смену email userB -> 403 (только self)
+POST http://localhost:3007/users/{{userBId}}/email-change
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "newEmail": "another@test.com"
+}
+
+### 409: userA пытается сменить email на уже занятый userB
+POST http://localhost:3007/users/{{userAId}}/email-change
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "newEmail": "{{userBEmail}}"
+}
+
+### 400: невалидный формат newEmail
+POST http://localhost:3007/users/{{userAId}}/email-change
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "newEmail": "not-an-email"
+}
+
+### 429: повторная инициация раньше OTP_RESEND_COOLDOWN_SECONDS -> Too many requests
+### (выполнить сразу вторым запросом после самого первого "userA инициирует смену email")
+POST http://localhost:3007/users/{{userAId}}/email-change
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "newEmail": "profile-a-new@test.com"
+}
+
+### 401: подтверждение неверным кодом
+POST http://localhost:3007/users/{{userAId}}/email-change/confirm
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "challengeId": "{{emailChangeChallengeId}}",
+  "code": "000000"
+}
+
+### 200: подтверждение верным кодом -> email обновлён, ответ = UserProfileView
+### code вписать вручную из письма/лога [MAIL STUB]
+POST http://localhost:3007/users/{{userAId}}/email-change/confirm
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "challengeId": "{{emailChangeChallengeId}}",
+  "code": "REPLACE_WITH_REAL_CODE"
+}
+
+### 401: повторное использование уже подтверждённого challengeId -> Invalid or expired code
+POST http://localhost:3007/users/{{userAId}}/email-change/confirm
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "challengeId": "{{emailChangeChallengeId}}",
+  "code": "REPLACE_WITH_REAL_CODE"
+}

@@ -14,6 +14,7 @@ import { IsNull, Repository } from 'typeorm';
 
 import { ConfigService } from '@/core/config/config.service';
 import { MailService } from '@/core/mail/mail.service';
+import { generateOtpCode } from '@/core/otp/otp.util';
 import { User } from '@/modules/users/entities/user.entity';
 import { UsersService } from '@/modules/users/users.service';
 
@@ -22,7 +23,6 @@ import { ConfirmLoginDto } from './dto/confirm-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginAttempt } from './entities/login-attempt.entity';
-import { generateOtpCode } from './otp.util';
 
 const SALT_ROUNDS = 10;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
