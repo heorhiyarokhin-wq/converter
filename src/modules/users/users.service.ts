@@ -45,4 +45,11 @@ export class UsersService {
 
     return this.usersRepository.save(user);
   }
+
+  updateUser(
+    user: User,
+    patch: Partial<Pick<User, 'email' | 'photo'>>,
+  ): Promise<User> {
+    return this.usersRepository.save(Object.assign(user, patch));
+  }
 }
