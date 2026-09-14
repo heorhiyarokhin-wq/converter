@@ -1,0 +1,85 @@
+### === Подготовка: два обычных юзера + админ ===
+
+### Регистрация userA (нужен для теста "self") -> 201, сохраняем id
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "profile-a@test.com",
+  "password": "passwordA1"
+}
+
+> {%
+    client.global.set("userAId", response.body.id);
+%}
+
+### Логин userA -> 200 { accessToken }
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "profile-a@test.com",
+  "password": "passwordA1"
+}
+
+> {%
+    client.global.set("userAToken", response.body.accessToken);
+%}
+
+### Регистрация userB (нужен как "чужой" профиль для userA) -> 201, сохраняем id
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "profile-b@test.com",
+  "password": "passwordB1"
+}
+
+> {%
+    client.global.set("userBId", response.body.id);
+%}
+
+### Логин админом (тот же аккаунт, что в login.http/rbac.http) -> 200 { accessToken }
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+> {%
+    client.global.set("adminToken", response.body.accessToken);
+%}
+
+### === Раздел 1: Просмотр данных пользователя (GET /users/:id) ===
+
+### Self: userA смотрит свой профиль -> 200 { id, email, photo, createdAt }
+### RbacGuard пропускает по обычному 'read' (есть у роли user), сервис видит
+### targetId === viewerId и не спрашивает read-any вообще
+GET http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+
+### Чужой без права: userA пытается посмотреть профиль userB -> 403
+### RbacGuard пропускает (у userA есть 'read'), но сервис видит targetId !== viewerId,
+### спрашивает read-any у роли 'user' -> false -> ForbiddenException
+GET http://localhost:3007/users/{{userBId}}
+Authorization: Bearer {{userAToken}}
+
+### Чужой с правом: admin смотрит профиль userA -> 200
+### targetId !== viewerId, но у роли 'admin' есть read-any -> разрешено
+GET http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{adminToken}}
+
+### 404: admin смотрит несуществующего пользователя -> 404
+### read-any проходит (это admin), но такого userId нет в таблице users
+GET http://localhost:3007/users/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{adminToken}}
+
+### 400: невалидный формат id (не UUID) -> 400
+### ParseUUIDPipe отбивает до того, как запрос дойдёт до контроллера/сервиса
+GET http://localhost:3007/users/not-a-uuid
+Authorization: Bearer {{adminToken}}
+
+### 401: запрос без токена вообще -> 401 (JwtAuthGuard, роут не @Public())
+GET http://localhost:3007/users/{{userAId}}
