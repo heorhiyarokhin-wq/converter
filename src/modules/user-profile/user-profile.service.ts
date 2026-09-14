@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -20,6 +21,7 @@ import { User } from '@/modules/users/entities/user.entity';
 import { UsersService } from '@/modules/users/users.service';
 
 import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { InitiateEmailChangeDto } from './dto/initiate-email-change.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserProfileView } from './dto/user-profile-view.interface';
@@ -179,6 +181,58 @@ export class UserProfileService {
     );
 
     return this.toProfileView(updated);
+  }
+
+  async deleteAccount(
+    targetId: string,
+    actorId: string,
+    dto: DeleteAccountDto,
+  ): Promise<void> {
+    const actorRoles = await this.getRoleNames(actorId);
+    const isElevated = this.rbacConfigService.hasPermission(
+      actorRoles,
+      'users',
+      'delete-any',
+    );
+
+    if (targetId !== actorId && !isElevated) {
+      this.logger.warn(
+        `[USERS audit] action=delete result=403 actorId=${actorId} targetId=${targetId}`,
+      );
+      throw new ForbiddenException();
+    }
+
+    const target = await this.usersService.findById(targetId);
+
+    if (!target) {
+      this.logger.warn(
+        `[USERS audit] action=delete result=404 actorId=${actorId} targetId=${targetId}`,
+      );
+      throw new NotFoundException();
+    }
+
+    if (!isElevated) {
+      if (!dto.password) {
+        throw new BadRequestException(
+          'password is required to delete your own account',
+        );
+      }
+
+      const passwordMatches = await bcrypt.compare(
+        dto.password,
+        target.passwordHash,
+      );
+
+      if (!passwordMatches) {
+        throw new UnauthorizedException('Invalid password');
+      }
+    }
+
+    await this.usersService.deleteUser(target);
+
+    this.logger.log(
+      `[USERS audit] action=delete result=200 actorId=${actorId} targetId=${targetId}`,
+    );
   }
 
   private async getRoleNames(userId: string): Promise<string[]> {

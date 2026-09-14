@@ -1,18 +1,28 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Res,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { FastifyReply } from 'fastify';
 
 import { CurrentUser } from '@/core/auth/decorators/current-user.decorator';
+import {
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+} from '@/core/auth/refresh-cookie.constants';
 import { RequirePermission } from '@/core/rbac/decorators/require-permission.decorator';
 
 import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { InitiateEmailChangeDto } from './dto/initiate-email-change.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserProfileView } from './dto/user-profile-view.interface';
@@ -83,5 +93,24 @@ export class UserProfileController {
     @Body() dto: ConfirmEmailChangeDto,
   ): Promise<UserProfileView> {
     return this.userProfileService.confirmEmailChange(targetId, actor.id, dto);
+  }
+
+  @RequirePermission('users', 'delete')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteAccount(
+    @Param('id', ParseUUIDPipe) targetId: string,
+    @CurrentUser() actor: { id: string },
+    @Body() dto: DeleteAccountDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
+    await this.userProfileService.deleteAccount(targetId, actor.id, dto);
+
+    // чистим cookie только своей же сессии — если admin удаляет чужого,
+    // это чужой браузер, у admin в его собственном ничего менять не нужно
+    if (targetId === actor.id) {
+      reply.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    }
   }
 }

@@ -3,8 +3,8 @@
 ### пока email меняется только здесь. При повторном прогоне всего файла (чтобы не ловить
 ### 409 "email already registered" на уже существующих userA/userB) меняйте суффикс ТОЛЬКО
 ### в этих трёх строках — остальной файл ничего не знает про конкретное значение.
-@userAEmail = profile-a5@test.com
-@userBEmail = profile-b5@test.com
+@userAEmail = profile-a7@test.com
+@userBEmail = profile-b7@test.com
 @userAPassword = passwordA1
 @userBPassword = passwordB1
 
@@ -47,6 +47,20 @@ Content-Type: application/json
 
 > {%
     client.global.set("userBId", response.body.id);
+%}
+
+### Логин userB -> 200 { accessToken } (нужен для раздела 4 — показать, что после
+### удаления этот токен перестаёт работать)
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userBEmail}}",
+  "password": "{{userBPassword}}"
+}
+
+> {%
+    client.global.set("userBToken", response.body.accessToken);
 %}
 
 ### Логин админом (тот же аккаунт, что в login.http/rbac.http) -> 200 { accessToken }
@@ -238,7 +252,8 @@ POST http://localhost:3007/users/{{userAId}}/email-change/confirm
 Authorization: Bearer {{userAToken}}
 Content-Type: application/json
 
-{
+
+  {
   "challengeId": "{{emailChangeChallengeId}}",
   "code": "REPLACE_WITH_REAL_CODE"
 }
@@ -252,3 +267,61 @@ Content-Type: application/json
   "challengeId": "{{emailChangeChallengeId}}",
   "code": "REPLACE_WITH_REAL_CODE"
 }
+
+### === Раздел 4: Удаление пользователя (DELETE /users/:id) ===
+### Порядок важен: сначала все безопасные (не разрушающие) проверки, разрушающие —
+### последними, потому что после них userAId/userAToken/userBId/userBToken умирают.
+
+### 400: userA пытается удалить себя без пароля в теле
+DELETE http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{}
+
+### 401: userA пытается удалить себя с неверным паролем
+DELETE http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "password": "definitely-wrong"
+}
+
+### Чужой без права: userA пытается удалить userB -> 403
+### RbacGuard пропускает (у роли user есть 'delete'), но сервис видит targetId !== actorId
+### и delete-any у роли 'user' отсутствует
+DELETE http://localhost:3007/users/{{userBId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{}
+
+### Admin удаляет userB напрямую, без пароля -> 204
+### У роли admin есть delete-any -> isElevated=true, проверка пароля не выполняется вообще
+DELETE http://localhost:3007/users/{{userBId}}
+Authorization: Bearer {{adminToken}}
+
+### 401: старый токен userB теперь не работает ВООБЩЕ, хотя по времени (JWT_EXPIRES_IN)
+### ещё не истёк — JwtAuthGuard на каждый запрос делает findById(payload.sub), строки нет
+GET http://localhost:3007/users/{{userBId}}
+Authorization: Bearer {{userBToken}}
+
+### 404: повторное удаление того же userB -> 404, не 409 — синхронный подход,
+### промежуточного состояния "уже удаляется" в системе не существует
+DELETE http://localhost:3007/users/{{userBId}}
+Authorization: Bearer {{adminToken}}
+
+### Self: userA удаляет СЕБЯ с верным паролем -> 204
+### Выполнять ПОСЛЕДНИМ — после этого userAId/userAToken больше ни на что не годятся
+DELETE http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}
+Content-Type: application/json
+
+{
+  "password": "{{userAPassword}}"
+}
+
+### 401: старый токен userA теперь тоже не работает — тот же эффект, что и для userB выше
+GET http://localhost:3007/users/{{userAId}}
+Authorization: Bearer {{userAToken}}

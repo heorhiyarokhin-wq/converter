@@ -52,4 +52,8 @@ export class UsersService {
   ): Promise<User> {
     return this.usersRepository.save(Object.assign(user, patch));
   }
+
+  async deleteUser(user: User): Promise<void> {
+    await this.usersRepository.remove(user);
+  }
 }
