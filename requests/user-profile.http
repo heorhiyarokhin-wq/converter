@@ -268,7 +268,44 @@ Content-Type: application/json
   "code": "REPLACE_WITH_REAL_CODE"
 }
 
-### === Раздел 4: Удаление пользователя (DELETE /users/:id) ===
+### === Раздел 4: Список пользователей (GET /users) ===
+### Выполняется ДО раздела 5 (удаление) специально — там userA/userB перестают
+### существовать, а здесь их наличие в списке — часть проверки.
+
+### Admin: список без фильтров -> 200 { items: [...], total }
+### 'read-any' есть у admin -> RbacGuard пропускает, дальше идём сразу в БД
+GET http://localhost:3007/users?limit=20&offset=0
+Authorization: Bearer {{adminToken}}
+
+### Admin: поиск по email через q -> 200, items содержит только userA
+### ILIKE '%...%' — совпадение по подстроке, регистронезависимо
+GET http://localhost:3007/users?q={{userAEmail}}
+Authorization: Bearer {{adminToken}}
+
+### Admin: пагинация — limit=1 -> 200, items.length === 1, но total считает ВСЕХ
+### (total — отдельный COUNT(*) без LIMIT, поэтому не равен items.length)
+GET http://localhost:3007/users?limit=1&offset=0
+Authorization: Bearer {{adminToken}}
+
+### 403: userA (роль user) пытается получить список -> 403
+### У роли 'user' нет 'read-any' -> RbacGuard отбивает до контроллера/сервиса
+GET http://localhost:3007/users
+Authorization: Bearer {{userAToken}}
+
+### 400: limit вне допустимого диапазона (> 100) -> 400
+### @Max(100) в ListUsersQueryDto
+GET http://localhost:3007/users?limit=1000
+Authorization: Bearer {{adminToken}}
+
+### 400: лишний, неописанный в DTO query-параметр -> 400
+### forbidNonWhitelisted в global ValidationPipe (main.ts) — тот самый пример с "hack"
+GET http://localhost:3007/users?limit=20&hack=1
+Authorization: Bearer {{adminToken}}
+
+### 401: запрос без токена -> 401
+GET http://localhost:3007/users
+
+### === Раздел 5: Удаление пользователя (DELETE /users/:id) ===
 ### Порядок важен: сначала все безопасные (не разрушающие) проверки, разрушающие —
 ### последними, потому что после них userAId/userAToken/userBId/userBToken умирают.
 

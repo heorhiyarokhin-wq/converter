@@ -23,6 +23,7 @@ import { UsersService } from '@/modules/users/users.service';
 import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { InitiateEmailChangeDto } from './dto/initiate-email-change.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserProfileView } from './dto/user-profile-view.interface';
 import { EmailChangeRequest } from './entities/email-change-request.entity';
@@ -235,6 +236,20 @@ export class UserProfileService {
     );
   }
 
+  async listUsers(
+    query: ListUsersQueryDto,
+  ): Promise<{ items: UserProfileView[]; total: number }> {
+    // права уже проверены в guard'е (@RequirePermission('users', 'read-any')
+    // на контроллере) — self/any-развилки тут нет, в отличие от остальных
+    // методов сервиса, поэтому дальше сразу идём в БД
+    const [users, total] = await this.usersService.findMany(query);
+
+    return {
+      items: users.map((user) => this.toProfileView(user)),
+      total,
+    };
+  }
+
   private async getRoleNames(userId: string): Promise<string[]> {
     const user = await this.usersService.findById(userId);
 
@@ -346,8 +361,7 @@ export class UserProfileService {
     };
 
     if (
-      !attempt ||
-      attempt.consumedAt !== null ||
+      attempt?.consumedAt !== null ||
       attempt.expiresAt < new Date() ||
       attempt.attemptsCount >= maxAttempts
     ) {

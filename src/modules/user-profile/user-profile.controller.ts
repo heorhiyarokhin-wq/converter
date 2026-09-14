@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Res,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -24,6 +25,7 @@ import { RequirePermission } from '@/core/rbac/decorators/require-permission.dec
 import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { InitiateEmailChangeDto } from './dto/initiate-email-change.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserProfileView } from './dto/user-profile-view.interface';
 import {
@@ -34,6 +36,23 @@ import {
 @Controller('users')
 export class UserProfileController {
   constructor(private readonly userProfileService: UserProfileService) {}
+
+  // Admin-only список всех пользователей — единственная не self-service ручка
+  // в этом контроллере (остальные — над своим/чужим ОДНИМ профилем). Оставлена
+  // здесь ради простоты; если admin-функционала станет больше (бан, смена
+  // роли и т.п.) — выносить в отдельный AdminUsersController.
+  //
+  // 'read-any', а не 'read' — у роли 'user' этого права нет вообще, так что
+  // никакой self/any-развилки внутри сервиса не нужно: guard сам отсекает
+  // всех, кроме admin, до того как запрос попадёт в listUsers()
+  @RequirePermission('users', 'read-any')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Get()
+  listUsers(
+    @Query() query: ListUsersQueryDto,
+  ): Promise<{ items: UserProfileView[]; total: number }> {
+    return this.userProfileService.listUsers(query);
+  }
 
   @RequirePermission('users', 'read')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
