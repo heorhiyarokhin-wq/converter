@@ -14,6 +14,10 @@ import ms from 'ms';
 
 import { CurrentUser } from '@/core/auth/decorators/current-user.decorator';
 import { Public } from '@/core/auth/decorators/public.decorator';
+import {
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+} from '@/core/auth/refresh-cookie.constants';
 import { ConfigService } from '@/core/config/config.service';
 
 import {
@@ -25,9 +29,6 @@ import {
 import { ConfirmLoginDto } from './dto/confirm-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-
-const REFRESH_COOKIE_NAME = 'refresh_token';
-const REFRESH_COOKIE_PATH = '/auth/refresh';
 
 @Controller('auth')
 export class AuthController {

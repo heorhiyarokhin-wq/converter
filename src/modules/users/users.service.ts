@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 
 import { Role } from '@/modules/rbac/entities/role.entity';
@@ -44,5 +44,38 @@ export class UsersService {
     });
 
     return this.usersRepository.save(user);
+  }
+
+  updateUser(
+    user: User,
+    patch: Partial<Pick<User, 'email' | 'photo'>>,
+  ): Promise<User> {
+    return this.usersRepository.save(Object.assign(user, patch));
+  }
+
+  async deleteUser(user: User): Promise<void> {
+    await this.usersRepository.remove(user);
+  }
+
+  findMany(params: {
+    limit: number;
+    offset: number;
+    q?: string;
+  }): Promise<[User[], number]> {
+    return this.usersRepository.findAndCount({
+      // явный select — гарантия, что passwordHash (и любое чувствительное поле,
+      // которое кто-то добавит в entity в будущем) никогда не попадёт в список.
+      // Без select find() тянет ВСЕ колонки по умолчанию.
+      select: { id: true, email: true, photo: true, createdAt: true },
+      // ищем именно в email — единственное текстовое поле User, по которому
+      // вообще имеет смысл частичный поиск (id — точное совпадение, не ILIKE)
+      //
+      // '%' + '' + '%' = '%%' — этот паттерн ILIKE совпадает с ЛЮБОЙ строкой,
+      // так что отдельная ветка "если q нет — верни всех" не нужна вообще
+      where: { email: ILike(`%${params.q ?? ''}%`) },
+      order: { createdAt: 'DESC' },
+      take: params.limit,
+      skip: params.offset,
+    });
   }
 }
