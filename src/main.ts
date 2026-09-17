@@ -5,6 +5,7 @@ import {
 } from '@nestjs/platform-fastify';
 import compression from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import { ValidationPipe } from '@nestjs/common';
 import {
   initializeTransactionalContext,
@@ -49,6 +50,18 @@ async function bootstrap() {
 
   await app.register(fastifyCookie, {
     secret: configService.get('COOKIE_SECRET'),
+  });
+
+  await app.register(multipart, {
+    limits: {
+      fileSize: Math.max(
+        Number(configService.get('CONVERT_MAX_SIZE_CSV')),
+        Number(configService.get('CONVERT_MAX_SIZE_JSON')),
+        Number(configService.get('CONVERT_MAX_SIZE_XML')),
+        Number(configService.get('CONVERT_MAX_SIZE_YAML')),
+      ),
+      files: 1,
+    },
   });
 
   const port = configService.get('PORT');

@@ -1,0 +1,249 @@
+### Email/пароль для тестового пользователя — меняйте только тут при повторном прогоне
+### (чтобы не ловить 409 "email already registered" на уже существующем userA).
+@userAEmail = convert-a4@test.com
+@userAPassword = passwordA1
+
+### === Подготовка: обычный пользователь + уже существующий админ (как в других *.http) ===
+
+### Регистрация userA -> 201
+POST http://localhost:3007/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{userAEmail}}",
+  "password": "{{userAPassword}}"
+}
+
+### Логин userA -> 200 { accessToken }
+### У роли 'user' есть право file-transform/convert по умолчанию (миграция
+### CreateFileTransformPermission выдаёт его обеим ролям одинаково)
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userAEmail}}",
+  "password": "{{userAPassword}}"
+}
+
+> {%
+    client.global.set("userAToken", response.body.accessToken);
+%}
+
+### Логин админом (тот же аккаунт, что в login.http/rbac.http) -> 200 { accessToken }
+POST http://localhost:3007/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@test.com",
+  "password": "passw0rd"
+}
+
+> {%
+    client.global.set("adminToken", response.body.accessToken);
+%}
+
+### === Раздел 1: Список поддерживаемых форматов (GET /convert/formats) ===
+
+### 200: все 12 направлений, сгенерированные из FORMAT_HANDLERS, а не захардкоженные
+GET http://localhost:3007/convert/formats
+Authorization: Bearer {{userAToken}}
+
+### 401: без токена
+GET http://localhost:3007/convert/formats
+
+### === Раздел 2: Конвертация (POST /convert) — по одному примеру на каждый формат ===
+
+### CSV -> JSON -> 200, массив объектов по заголовку
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary1
+
+------ConvertBoundary1
+Content-Disposition: form-data; name="file"; filename="data.csv"
+Content-Type: text/csv
+
+name,age
+Anna,30
+Bob,25
+------ConvertBoundary1
+Content-Disposition: form-data; name="targetFormat"
+
+json
+------ConvertBoundary1--
+
+### JSON -> XML -> 200, обёрнуто в <root>, т.к. верхний уровень — объект без родителя
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary2
+
+------ConvertBoundary2
+Content-Disposition: form-data; name="file"; filename="data.json"
+Content-Type: application/json
+
+{"name": "Anna", "age": 30}
+------ConvertBoundary2
+Content-Disposition: form-data; name="targetFormat"
+
+xml
+------ConvertBoundary2--
+
+### XML -> YAML -> 200
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary3
+
+------ConvertBoundary3
+Content-Disposition: form-data; name="file"; filename="data.xml"
+Content-Type: application/xml
+
+<root><name>Anna</name><age>30</age></root>
+------ConvertBoundary3
+Content-Disposition: form-data; name="targetFormat"
+
+yaml
+------ConvertBoundary3--
+
+### YAML -> CSV -> 200
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary4
+
+------ConvertBoundary4
+Content-Disposition: form-data; name="file"; filename="data.yaml"
+Content-Type: application/x-yaml
+
+- name: Anna
+  age: 30
+- name: Bob
+  age: 25
+------ConvertBoundary4
+Content-Disposition: form-data; name="targetFormat"
+
+csv
+------ConvertBoundary4--
+
+### saveResult=true -> 200, результат ДОПОЛНИТЕЛЬНО пишется в storage/converted/<id историй>.
+### historyId клиенту не возвращается (контракт ТЗ отдаёт только сам файл) — id для
+### раздела 3 нужно подсмотреть напрямую в таблице file_transformations (WHERE user_id = ...
+### ORDER BY created_at DESC) и вписать вручную в REPLACE_WITH_HISTORY_ID ниже.
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary5
+
+------ConvertBoundary5
+Content-Disposition: form-data; name="file"; filename="data.csv"
+Content-Type: text/csv
+
+name,age
+Anna,30
+------ConvertBoundary5
+Content-Disposition: form-data; name="targetFormat"
+
+json
+------ConvertBoundary5
+Content-Disposition: form-data; name="saveResult"
+
+true
+------ConvertBoundary5--
+
+### 415: неподдерживаемое расширение файла -> UnsupportedMediaTypeException
+### detectFormatByExtension смотрит на filename, не на Content-Type части
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary6
+
+------ConvertBoundary6
+Content-Disposition: form-data; name="file"; filename="data.txt"
+Content-Type: text/plain
+
+hello
+------ConvertBoundary6
+Content-Disposition: form-data; name="targetFormat"
+
+json
+------ConvertBoundary6--
+
+### 400: синтаксически битый JSON -> ошибка внутри JsonFormatHandler.parse(),
+### поймана в FileTransformService.convert() и превращена в единый 400
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary7
+
+------ConvertBoundary7
+Content-Disposition: form-data; name="file"; filename="broken.json"
+Content-Type: application/json
+
+{not valid json
+------ConvertBoundary7
+Content-Disposition: form-data; name="targetFormat"
+
+csv
+------ConvertBoundary7--
+
+### 401: без токена
+POST http://localhost:3007/convert
+Content-Type: multipart/form-data; boundary=----ConvertBoundary8
+
+------ConvertBoundary8
+Content-Disposition: form-data; name="file"; filename="data.csv"
+Content-Type: text/csv
+
+name,age
+Anna,30
+------ConvertBoundary8
+Content-Disposition: form-data; name="targetFormat"
+
+json
+------ConvertBoundary8--
+
+### 413: превышение лимита размера для исходного формата — не воспроизвести коротким
+### телом в этом файле; чтобы реально проверить, временно поставьте в .env
+### CONVERT_MAX_SIZE_CSV=10 и повторите любой CSV->* запрос выше -> 413 Payload Too Large,
+### затем верните исходное значение.
+
+### === Раздел 3: XXE-безопасность (fast-xml-parser не резолвит внешние сущности) ===
+
+### XML с объявленной внешней сущностью -> проверено вживую: 400 (парсер спотыкается
+### на самом DOCTYPE с объявлением сущности и бросает ошибку, пойманную в сервисе как
+### обычная невалидная структура). Файл сервера при этом НЕ читается — не 500, не утечка,
+### просто конкретный код ответа другой, чем "тихо проигнорировал"
+POST http://localhost:3007/convert
+Authorization: Bearer {{userAToken}}
+Content-Type: multipart/form-data; boundary=----ConvertBoundary9
+
+------ConvertBoundary9
+Content-Disposition: form-data; name="file"; filename="evil.xml"
+Content-Type: application/xml
+
+<!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<root><value>&xxe;</value></root>
+------ConvertBoundary9
+Content-Disposition: form-data; name="targetFormat"
+
+json
+------ConvertBoundary9--
+
+### === Раздел 4: Скачивание сохранённого результата (GET /convert/history/:id/download) ===
+
+### 200: скачивание результата, сохранённого запросом с saveResult=true выше
+### (замените REPLACE_WITH_HISTORY_ID на id из таблицы file_transformations)
+GET http://localhost:3007/convert/history/REPLACE_WITH_HISTORY_ID/download
+Authorization: Bearer {{userAToken}}
+
+### 404: чужой запрашивает не свою историю — even admin не имеет обхода (сознательное
+### решение, self-only без admin-исключения, в отличие от user-profile)
+GET http://localhost:3007/convert/history/REPLACE_WITH_HISTORY_ID/download
+Authorization: Bearer {{adminToken}}
+
+### 404: несуществующий id
+GET http://localhost:3007/convert/history/00000000-0000-0000-0000-000000000000/download
+Authorization: Bearer {{userAToken}}
+
+### 500 (известное принятое ограничение, не баг): скачивание истории, где saveResult был
+### false/не указан — ResultStorageService.read() бросает ошибку чтения файла, сервис её
+### не ловит. Возьмите id CSV->JSON запроса из раздела 2 (без saveResult) для проверки.
+GET http://localhost:3007/convert/history/REPLACE_WITH_HISTORY_ID_UNSAVED/download
+Authorization: Bearer {{userAToken}}
+
+### 401: без токена
+GET http://localhost:3007/convert/history/00000000-0000-0000-0000-000000000000/download

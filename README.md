@@ -39,6 +39,7 @@ PostgreSQL and TypeORM are already wired in. Use them for new modules — no ext
 - **Schema:** migrations in `src/database/migrations/`. `POSTGRES_SYNCHRONIZE` is `false` by default — do not rely on auto-sync
 - **SQL study track:** [docs/postgres-sql.md](docs/postgres-sql.md) (practice queries: `src/database/practice/postgres-sql-practice.sql`)
 - **ORM study track:** [docs/orm-typeorm.md](docs/orm-typeorm.md) (TypeORM на схеме этого проекта)
+- **File processing study track:** [docs/file-processing.md](docs/file-processing.md) (multipart, MIME, CSV, картинки — якорь `users.photo`)
 
 ```bash
 npm run migration:generate   # Generate from entity changes

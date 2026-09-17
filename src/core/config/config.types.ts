@@ -52,4 +52,12 @@ export interface Config {
    */
   SMTP_URL?: string;
   MAIL_FROM?: string;
+
+  /**
+   * File transformation (CSV/JSON/XML/YAML) size limits, bytes
+   */
+  CONVERT_MAX_SIZE_CSV?: number;
+  CONVERT_MAX_SIZE_JSON?: number;
+  CONVERT_MAX_SIZE_XML?: number;
+  CONVERT_MAX_SIZE_YAML?: number;
 }
