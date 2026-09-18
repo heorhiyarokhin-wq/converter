@@ -55,4 +55,12 @@ export const configValidationSchema = Joi.object<Config>({
    */
   SMTP_URL: Joi.string().optional(),
   MAIL_FROM: Joi.string().optional(),
+
+  /**
+   * File transformation (CSV/JSON/XML/YAML) size limits, bytes
+   */
+  CONVERT_MAX_SIZE_CSV: Joi.number().optional().default(5_000_000),
+  CONVERT_MAX_SIZE_JSON: Joi.number().optional().default(5_000_000),
+  CONVERT_MAX_SIZE_XML: Joi.number().optional().default(5_000_000),
+  CONVERT_MAX_SIZE_YAML: Joi.number().optional().default(5_000_000),
 });
